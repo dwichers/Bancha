@@ -1,23 +1,20 @@
 /*!
  *
- * Bancha Project : Combining Ext JS and CakePHP (http://banchaproject.org)
- * Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
- *
- * Licensed under The MIT License
- * Redistributions of files must retain the above copyright notice.
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
  *
  * @package       Bancha
- * @copyright     Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
+ * @copyright     Copyright 2011-2012 StudioQ OG
  * @link          http://banchaproject.org Bancha Project
  * @since         Bancha v 0.0.2
- * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
  * @author        Roland Schuetz <mail@rolandschuetz.at>
  * @version       Bancha v PRECOMPILER_ADD_RELEASE_VERSION
  *
- * For more information go to http://banchaproject.org 
+ * For more information go to http://banchaproject.org
  */
 /*jslint browser: true, vars: false, plusplus: true, white: true, sloppy: true */
-/*global Ext, Bancha, window */
+/*jshint bitwise:true, curly:true, eqeqeq:true, forin:true, immed:true, latedef:true, newcap:true, noarg:true, noempty:true, regexp:true, undef:true, trailing:false, strict:false */
+/*global Ext:false, Bancha:true, TraceKit:false, window:false */
 
 /**
  * @class Bancha.data.Model
@@ -36,7 +33,7 @@ Ext.define('Bancha.data.Model', {
     /**
      * @cfg
      * If true the frontend forces consistency
-     * This is not yet supported! See https://github.com/Bancha/Bancha/wiki/Roadmap
+     * This is not yet supported! See http://docs.banchaproject.org/resources/Roadmap.html
      */
     forceConsistency: false
 });
@@ -126,12 +123,12 @@ Ext.define('Bancha.data.writer.ConsistentJson', {
  */
 
 Ext.require([
-    'Ext.form.field.VTypes'
+    'Ext.data.validations' // they are differently called in ExtJS and Sencha Touch, but work by alias just fine
 ], function() {
 
     var filenameHasExtension = function(filename,validExtensions) {
-        if(filename==='') {
-            return true; // no file defined
+        if(!filename) {
+            return true; // no file defined (emtpy string or undefined)
         }
         if(!Ext.isDefined(validExtensions)) {
             return true;
@@ -142,7 +139,7 @@ Ext.require([
     
     /**
      * @class Ext.data.validations
-     * Custom validations for scaffolding support
+     * Custom validations mapped from CakePHP.
      * @author Roland Schuetz <mail@rolandschuetz.at>
      * @docauthor Roland Schuetz <mail@rolandschuetz.at>
      */
@@ -189,6 +186,42 @@ Ext.require([
         }
     });
 });
+
+
+/*
+ * Polyfill for IE 6,7 and partially 8
+ * Add support for ECMAScript 5 Array.reduce
+ * Currently used in Ext.objectFromPath
+ * From https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Array/Reduce
+ */
+ /*jsl:ignore*/
+/*jshint bitwise:false, curly:false */
+if (!Array.prototype.reduce) {
+  Array.prototype.reduce = function reduce(accumulator){
+    if (this===null || this===undefined) throw new TypeError("Object is null or undefined");
+    var i = 0, l = this.length >> 0, curr;
+
+    if(typeof accumulator !== "function") // ES5 : "If IsCallable(callbackfn) is false, throw a TypeError exception."
+      throw new TypeError("First argument is not callable");
+
+    if(arguments.length < 2) {
+      if (l === 0) throw new TypeError("Array length is 0 and no second argument");
+      curr = this[0];
+      i = 1; // start accumulating at the second element
+    }
+    else
+      curr = arguments[1];
+
+    while (i < l) {
+      if(i in this) curr = accumulator.call(undefined, curr, this[i], i, this);
+      ++i;
+    }
+
+    return curr;
+  };
+}
+/*jshint bitwise:true, curly:true */
+/*jsl:end*/
 
 /**
  * @class Bancha
@@ -241,7 +274,7 @@ Ext.define('Bancha', {
     // ENDIF
 
     /* If remote api is already loaded, keep it */
-    REMOTE_API: Bancha.REMOTE_API,
+    REMOTE_API: window.Bancha ? Bancha.REMOTE_API : undefined,
     
     /**
      * @property
@@ -345,6 +378,25 @@ Ext.define('Bancha', {
         return this.objectFromPath(this.namespace);
     },
     /**
+     * Returns remote stubs for a given cake controller name in singular
+     * @param {String} stubName the cakephp controller name in singular
+     * @return {Object} The stub if already defined, otherwise undefined
+     */
+    getStub: function(stubName) {
+        if(!Bancha.initialized) {
+            Bancha.init();
+        }
+        // IFDEBUG
+        if(!Ext.isObject(Bancha.getStubsNamespace()[stubName])) {
+            Ext.Error.raise({
+                plugin: 'Bancha',
+                msg: 'Bancha: The Stub '+stubName+' doesn\'t exist'
+            });
+        }
+        // ENDIF
+        return Bancha.getStubsNamespace()[stubName] || undefined;
+    },
+    /**
      * @private
      * Returns the remote api definition of Ext.direct
      * @return {Object} The api if already defined, otherwise undefined
@@ -367,15 +419,29 @@ Ext.define('Bancha', {
         return this.objectFromPath(this.remoteApi);
     },
     /**
+     * @deprecated Bancha internally calls this function, you don't need to explicitly use it anymore
      * Inits Bancha with the RemotingProvider, always init before using Bancha.  
      * ({@link Bancha#onModelReady} will init automatically)
      */
     init: function() {
         var remoteApi,
-            regex;
+            regex,
+            defaultErrorHandle,
+            scripts,
+            foundApi = false,
+            apiPath,
+            response,
+            result;
         
         // IFDEBUG
-        if(!Ext.isReady) {
+
+        // show all initialize errors as message
+        defaultErrorHandle = Ext.Error.handle;
+        Ext.Error.handle = function(err) {
+            Ext.Msg.alert('Bancha Error', err.msg);
+        };
+
+        if(Ext.versions.extjs && !Ext.isReady) {
             Ext.Error.raise({
                 plugin: 'Bancha',
                 msg: 'Bancha: Bancha should be initalized after the onReady event.'
@@ -383,9 +449,82 @@ Ext.define('Bancha', {
         }
         
         if(!Ext.isObject(this.objectFromPath(this.remoteApi))) {
+
+            // the remote api is not available, check if this is because of an error on the bancha-api.js or because it is not included
+            scripts = Ext.DomQuery.select('script');
+            Ext.each(scripts, function(script) {
+                if(script.src && (script.src.search(/bancha-api\.js/)!==-1 || script.src.search(/bancha-api\/models\/([A-Za-z]*)\.js/)!==-1)) {
+                    // the bancha-api seems to be included
+                    foundApi = true;
+                    apiPath = script.src;
+                }
+            });
+
+            if(!apiPath) {
+                // try in the root directory
+                apiPath = '/bancha-api.js';
+            }
+
+            // load the api
+            response = Ext.Ajax.request({
+                url : apiPath,
+                async : false
+            });
+
+            if(!foundApi) {
+                // user just forgot to include the api
+                Ext.Error.raise({
+                    plugin: 'Bancha',
+                    msg: [
+                        '<b>Bancha Configuration Error:</b><br />',
+                        'Please include the Bancha API before using Bancha by adding into your html:<br /><br />',
+                        response.status===200 ? 
+                            '<i>&lt;script type=&quot;text/javascript&quot; src=&quot;/bancha-api.js&quot;&gt;&lt;/script&gt;</i>' :
+                            '<i>&lt;script type=&quot;text/javascript&quot; src=&quot;path/to/your/webroot/bancha-api.js&quot;&gt;&lt;/script&gt;</i>'
+                    ].join('')
+                });
+            }
+
+            if(response.status === 404) {
+                //the api is included, but there seems to be an error
+                Ext.Error.raise({
+                    plugin: 'Bancha',
+                    msg: [
+                        '<b>Bancha Configuration Error:</b><br />',
+                        'You have an error in your <a href="'+apiPath+'">Bancha API</a>, please fix it:<br /><br />',
+
+                        response.responseText.search(/<h2>Not Found<\/h2>/)!==-1 ? '<b>Note: You might have to turn ob debug mode to get a usefull error message!</b><br/><br/>' : '',
+
+                        response.responseText.substr(0,31) === '<script type="text/javascript">' ? // remote the script tags
+                            response.responseText.substr(31,response.responseText.length-31-9) : 
+                            response.responseText
+                    ].join('')
+                });
+            }
+
+            if(response.responseText.search(/Parse error/)!==-1 || response.responseText.search(/cake-error/)!==-1) {
+                // there is an php error in cake
+                Ext.Error.raise({
+                    plugin: 'Bancha',
+                    msg: [
+                        '<b>CakePHP Error:</b><br />',
+                        'You have an php error in your code:<br /><br />',
+
+                        response.responseText.substr(0,31) === '<script type="text/javascript">' ? // remote the script tags
+                            response.responseText.substr(31,response.responseText.length-31-9) : 
+                            response.responseText
+                    ].join('')
+                });
+            }
+
+            // general error message
             Ext.Error.raise({
                 plugin: 'Bancha',
-                msg: 'Bancha: The remote api '+this.remoteApi+' is not yet defined, please define the api before using Bancha.init().'
+                msg: [
+                    '<b>Unknown Error in Bancha API:</b><br />',
+                    'You have an error in your <a href="'+apiPath+'">Bancha API</a>, please open the API for details.<br />',
+                    'Note: You might have to turn ob debug mode to get a usefull error message!<br />'
+                ].join('')
             });
         }
         
@@ -397,9 +536,33 @@ Ext.define('Bancha', {
         }
         // ENDIF
         
+
         remoteApi = this.getRemoteApi();
-        
-        
+
+        // IFDEBUG
+        if(remoteApi && remoteApi.metadata && remoteApi.metadata._CakeError) {
+            // there is an cake error
+            Ext.Error.raise({
+                plugin: 'Bancha',
+                msg: [
+                    '<b>CakePHP Error:</b><br />',
+                    'You have an error in your cakephp code:<br /><br />',
+                    Ext.isString(remoteApi.metadata._CakeError) ? 
+                        remoteApi.metadata._CakeError : 
+                        'Please turn the cakephp debug mode on to see the error message!'
+                ].join('')
+            });
+        }
+        // ENDIF
+
+        // init error logging in production mode
+        if(Bancha.getDebugLevel()===0 && window.TraceKit && TraceKit.report && Ext.isFunction(TraceKit.report.subscribe)) {
+            TraceKit.report.subscribe(function(stackInfo) {
+                // make sure to not bind the function, but the locaton (for later overriding)
+                Bancha.onError(stackInfo);
+            });
+        }
+
         // if the server didn't send an metadata object in the api, create it
         if(!Ext.isDefined(remoteApi.metadata)) {
             remoteApi.metadata = {};
@@ -422,7 +585,106 @@ Ext.define('Bancha', {
         // init Provider
         Ext.direct.Manager.addProvider(remoteApi);
         
+        //IFDEBUG
+        // test if the bancha dispatcher is available
+        response = Ext.Ajax.request({
+            url: remoteApi.url+'?setup-check=true',
+            async: false
+        });
+        try {
+            result = Ext.decode(response.responseText, true);
+        } catch(e) {
+            // handle below
+        }
+        if(response.status!==200 || !Ext.isObject(result) || !result.BanchaDispatcherIsSetup) {
+
+            // this might be just an update issue
+            // check if the old name (bancha.php) still works
+            response = Ext.Ajax.request({
+                url: remoteApi.url.replace(/bancha-dispatcher\.php/, 'bancha.php')+'?setup-check=true',
+                async: false
+            });
+            try {
+                result = Ext.decode(response.responseText, true);
+            } catch(e) {
+                // There are many errors, let the user first rename the Bancha dispatcher and then fix the other
+            }
+            if(response.status===200 && Ext.isObject(result) && result.BanchaDispatcherIsSetup) {
+                // old bancha dispatcher is still available
+                Ext.Error.raise({
+                    plugin: 'Bancha',
+                    msg: [
+                        '<b>Bancha Update Error:</b><br />',
+                        'Since 1.1.0 the Bancha Dispatcher got renamed from "bancha.php" to "bancha-dispatcher.php".<br /><br />',
+                        '<b>Please rename the file <i>app/webroot/bancha.php</i> to <i>bancha-dispatcher.php</i><br />'
+                    ].join('')
+                });
+            }
+
+            Ext.Error.raise({
+                plugin: 'Bancha',
+                msg: [
+                    '<b>Bancha Configuration Error:</b><br />',
+                    'Bancha expects the Bancha Dispatcher to be reachable at <a href="'+remoteApi.url+'">'+remoteApi.url+'</a>.<br /><br />',
+                    '<b>Probably you just forgot to copy the file <i>Bancha/_app/webroot/bancha-dispatcher.php</i> into your app at <i>app/webroot/bancha-dispatcher.php</i><br />',
+                    'Please do this and then reload the page.</b>'
+                ].join('')
+            });
+        }
+
+        // reset to default error handler
+        Ext.Error.handle = defaultErrorHandle;
+
+        // ENDIF
+
         this.initialized = true;
+
+        // In Cake Debug mode set up all default error handlers
+        if(this.getDebugLevel()!==0) { // this works only when this.initialized===true
+            this.setupDebugErrorHandler();
+        }
+    },
+    /**
+     * If you are using Banchas debug version and CakePHP is in debug mode this function will be used when Bancha initializes
+     * to setup debugging error handlers.
+     * In production mode this function will be empty. This function is only triggered when cakes debug level is greater then zero.
+     */
+    setupDebugErrorHandler: function() {
+
+        //IFDEBUG
+        // catch every debug exception thrown from either ExtJS or Bancha
+        Ext.Error.handle = function(err) {
+            Ext.Msg.alert('Error', err.msg);
+        };
+
+        // catch server-side errors
+        Ext.direct.Manager.on('exception', function(err){
+            // normalize ExtJS and Sencha Touch
+            var data = (typeof err.getCode === 'function') ? {
+                code: err.getCode(),
+                message: err.getMessage(),
+                data: {
+                    msg: err.getData()
+                },
+
+                // bancha-specific
+                exceptionType: err.config.exceptionType,
+                where: err.config.where,
+                trace: err.config.trace
+            } : err;
+            
+            // handle error
+            if(data.code==="parse") {
+                // parse error
+                Ext.Msg.alert('Bancha: Server-Response can not be decoded',data.data.msg);
+            } else {
+                // exception from server
+                Ext.Msg.alert('Bancha: Exception from Server',
+                    "<br/><b>"+(data.exceptionType || "Exception")+": "+data.message+"</b><br /><br />"+
+                    ((data.where) ? data.where+"<br /><br />Trace:<br />"+data.trace : "<i>Turn on the debug mode in cakephp to see the trace.</i>"));
+            }
+        });
+        //ENDIF
     },
     /**
      * @private
@@ -755,6 +1017,33 @@ Ext.define('Bancha', {
          return (api && api.metadata && api.metadata[this.uidPropertyName]) ? api.metadata[this.uidPropertyName] : false;
     },
     /**
+     * Returns the current CakePHP debug level
+     * 
+     * @param defaultValue {Number} (optional) The number to return if the Remote API is not yet initialized (Default: undefined)
+     * @return the current debug level, or if not available the default
+     */
+    getDebugLevel: function(defaultValue) {
+        if(!this.initialized) {
+            return defaultValue;
+        }
+        
+        var api = this.getRemoteApi();
+        return (api && api.metadata && Ext.isDefined(api.metadata._CakeDebugLevel)) ? api.metadata._CakeDebugLevel : defaultValue;
+    },
+    /**
+     * In production mode (or if errors occur when Bancha is not initialized) this function will be called
+     * This function will log the error to the server and then throw it.
+     * You can overwrite this function with your own implementation at any time.
+     *
+     * @parram stackInfo {Object} an TraceKit error object, see also {@link https://github.com/Bancha/TraceKit TraceKit}
+     */
+    onError: function(stackInfo) {
+        if(Bancha.getDebugLevel(0)===0) {
+            // log the error to the server
+            Bancha.getStub('Bancha').logError(stackInfo);
+        }
+    },
+    /**
      * @property {Function|False} onRemoteException
      * This function will be added to each model to handle remote errors.
      * (modelConfig.listeners.exception).  
@@ -771,17 +1060,17 @@ Ext.define('Bancha', {
     
 
 	/**
-	 * Checks if a Bancha model is already created (convinience function)
-	 * 
-	 * @param {String} The model name (without any namespace)
-	 * @param {Boolean} True if the model exists
-	 */
+     * Checks if a Bancha model is already created (convinience function)
+     * 
+     * @param {String} The model name (without any namespace)
+     * @param {Boolean} True if the model exists
+     */
 	isCreatedModel: function(modelName) {
 		return Ext.ClassManager.isCreated(Bancha.modelNamespace+'.'+modelName);
 	},
 	
     /**
-     * This method creates a {@link Bancha.data.Model} with your additional model configs, 
+     * This method creates a {@link Bancha.data.Model} with your additional model configs,
      * if you don't have any additional configs just use the convienience method {@link #getModel}.  
      * 
      * In the debug version it will raise an Ext.Error if the model can't be 
@@ -789,6 +1078,8 @@ Ext.define('Bancha', {
      * 
      * @param {String} modelName The name of the model
      * @param {Object} modelConfig A standard Ext.data.Model config object
+                                     In ExtJS this will be directly applied.
+                                     In Sencha Touch this iwll be applied to the config property.
      * @return {Boolean} Returns true is model was created successfully
      */
     createModel: function(modelName, modelConfig) {
@@ -800,14 +1091,9 @@ Ext.define('Bancha', {
             stub,
             idProperty;
         
-        // IFDEBUG
-        if(!this.initialized) {
-            Ext.Error.raise({
-                plugin: 'Bancha',
-                msg: 'Bancha: Bancha is not yet initalized, please init before using Bancha.createModel().'
-            });
+        if(!Bancha.initialized) {
+            Bancha.init();
         }
-        // ENDIF
         
         if(!this.isRemoteModel(modelName)) {
             // IFDEBUG
@@ -815,7 +1101,7 @@ Ext.define('Bancha', {
                 plugin: 'Bancha',
                 modelName: modelName,
                 modelConfig: modelConfig,
-                msg: 'Bancha: Couldn\'t create the model cause the model is not supported by the server (no remote model).'
+                msg: 'Bancha: Couldn\'t create the model "'+modelName+'" cause the model is not supported by the server (no remote model).'
             });
             // ENDIF
             return false;
@@ -905,7 +1191,7 @@ Ext.define('Bancha', {
             idProperty: idProperty,
             proxy: {
                 type: 'direct', // TODO batch requests: http://www.sencha.com/forum/showthread.php?156917
-                batchActions: false, // don't batch requests, cake can't handle multiple records (the requests will be by batched by Ext.Direct)
+                batchActions: false, // don't batch requests on the store level, they will be batched batched by Ext.Direct on the application level
                 api: {
                     /* IFPRODUCTION
                     // if method is not supported by remote it get's set to undefined
@@ -932,17 +1218,20 @@ Ext.define('Bancha', {
                 // ENDIF
                 reader: {
                     type: 'json',
-                    root: 'data',
+                    root: 'data', // <-- this is for ExtJS
+                    rootProperty: 'data', // <-- this is for Sencha Touch
                     messageProperty: 'message'
                 },
                 writer: (modelConfig.forceConsistency) ? {
                     type: 'consitentjson',
                     writeAllFields: false,
-                    root: 'data'
+                    root: 'data', // <-- this is for ExtJS
+                    rootProperty: 'data' // <-- this is for Sencha Touch
                 } : {
                     type: 'jsondate',
                     writeAllFields: false,
-                    root: 'data'
+                    root: 'data', // <-- this is for ExtJS
+                    rootProperty: 'data' // <-- this is for Sencha Touch
                 },
                 listeners: {
                     exception: this.onRemoteException || Ext.emptyFn
@@ -951,6 +1240,20 @@ Ext.define('Bancha', {
         };
         metaData = Ext.clone(this.getModelMetaData(modelName));
         modelConfig = Ext.apply(metaData, modelConfig, defaults);
+        
+        // The Sencha Touch and ExtJS model structure differ
+        // Therefore we msut recognize here if it is a Touch version and
+        // in this case adopt the config structure
+        if(Ext.versions.touch) {
+            // place all configs in the config property
+            modelConfig = {
+                extend: modelConfig.extend,
+                config: modelConfig
+            };
+            
+            // this one should only be on the model itself
+            delete modelConfig.config.extend;
+        }
         
         // create the model
         Ext.define(Bancha.modelNamespace+'.'+modelName, modelConfig);
@@ -968,7 +1271,193 @@ Ext.define('Bancha', {
      * @method getModel
      */
     getModel: function(modelName) {
+        if(!Bancha.initialized) {
+            Bancha.init();
+        }
         return (this.isCreatedModel(modelName) || this.createModel(modelName)) ? Ext.ClassManager.get(Bancha.modelNamespace+'.'+modelName) : null;
+    },
+
+    /**
+     * @singleton
+     * @class Bancha.Localizer
+     * Language support for Bancha.
+     */
+    Localizer: {
+        /**
+         * @private
+         * @property
+         * The default value for Bancha.t's langCode.
+         * Use the getter and setter methods!
+         */
+        currentLang: 'eng',
+        /**
+         * Returns the default language for {@link Bancha.Localizer.getLocaleStrings},
+         * {@link Bancha.Localizer.getLocalizedStringWithReplacements} and {@link Bancha.t}
+         *
+         * @return {String} the three letter code of the current language, as in cakephp, e.g. 'eng'
+         */
+        getCurrentLanguage: function() {
+            return this.currentLang;
+        },
+        /**
+         * Sets a new default language for {@link Bancha.Localizer.getLocaleStrings},
+         * {@link Bancha.Localizer.getLocalizedStringWithReplacements} and {@link Bancha.t}
+         *
+         * @param lang {String} the three letter code of the new language, as in cakephp, e.g. 'eng'
+         */
+        setCurrentLanguage: function(lang) {
+            this.currentLang = lang;
+        },
+        /**
+         * You can use this function to preload translations
+         * @param langCode a three letter language code, same as in cakephp (Default is currentLang property)
+         */
+        preloadLanguage: function(langCode) {
+            if (!this.locales) {
+                this.locales = new Ext.util.HashMap();
+            }
+            this.loadLocaleStrings(langCode || this.currentLang, true);
+        },
+        /**
+         * @private
+         * @param langCode a three letter language code, same as in cakephp
+         * @param asnyc False to block while loading (Default: false)
+         * @return the loaded array of translations
+         */
+        loadLocaleStrings: function(locale, async) {
+            var me = this, localeStrings;
+            Ext.Ajax.request({
+                url : "/bancha/bancha/translations/" + locale + ".js",
+                async : async || false,
+                success : function(response) {
+                    var entries = Ext.decode(response.responseText);
+                    localeStrings = new Ext.util.HashMap();
+                    Ext.each(entries, function(entry) {
+                        localeStrings.add(entry.key, entry.value);
+                    });
+                    me.locales.add(locale, localeStrings);
+                },
+                failure : function() {
+                    me.locales.add(locale, false);
+                    localeStrings = false;
+                }
+            });
+            return localeStrings;
+        },
+        /**
+         * @private
+         * @param langCode a three letter language code, same as in cakephp
+         * @return the loaded array of translations
+         */
+        getLocaleStrings: function(locale) {
+            var me = this, localeStrings;
+            if (!me.locales) {
+                me.locales = new Ext.util.HashMap();
+            }
+            if (!me.locales.get(locale)) {
+                localeStrings = me.loadLocaleStrings(locale);
+            } else {
+                localeStrings = me.locales.get(locale);
+            }
+            if (Ext.isBoolean(localeStrings) && !localeStrings) {
+                // If locale key contains "false" we
+                // tried to load the locale file before
+                // but failed.
+                return;
+            }
+            return localeStrings;
+        },
+        /**
+         * Translates an given string to the given language, 
+         * or the one set in Bancha.Localizer.currentLang.
+         * @param key the string to translate
+         * @param langCode a three letter language code, same as in 
+         *        cakephp (Default from Bancha.Localizer.currentLang)
+         */
+        getLocalizedString: function(key, locale) {
+            var me = this,
+                localeStrings,
+                localized;
+
+            key = key + ''; // string conversion
+
+            locale = locale || this.currentLang;
+            if (!key || !locale) {
+                return key;
+            }
+            localeStrings = me.getLocaleStrings(locale);
+            if (!localeStrings) {
+                return key;
+            }
+            localized = localeStrings.get(key);
+            // empty strings are intentional, so just return if it's undefined
+            if (!Ext.isString(localized)) { 
+                return key;
+            }
+            return localized;
+        },
+        /**
+         * Translates an given string the current language
+         * (see {@link Bancha.Localizer.currentLang}.
+         *
+         * Additional arguments are used to replace %s (for string) and %d (for number).
+         * @param key the string to translate
+         * @param replacement1 An arbitrary number of additional strings to replace %s in the first one
+         */
+        getLocalizedStringWithReplacements: function(key, replacement1, replacement2, replacement3) {
+            // translate
+            key = this.getLocalizedString(key);
+
+            // replace %s and %d
+            var bits = key.split('%'),
+                result = bits[0],
+                i, len, p;
+
+            // IFDEBUG
+            if(bits.length !== arguments.length) { // replacements+first substr should equal key+replacements
+                Ext.Error.raise({
+                    plugin: 'Bancha',
+                    msg: 'Bancha.Localizer expected for the string "'+key+'" '+(bits.length-1)+' replacement(s), instead got '+(arguments.length-1)+'.'
+                });
+            }
+            // ENDIF
+
+            for(i=1, len=bits.length; i<len; i++) {
+                switch(bits[i].substr(0,1)) {
+                    case 'd':
+                        result += parseInt(arguments[i], 10);
+                        break;
+                    case 's':
+                        result += arguments[i];
+                        break;
+                    default: 
+                        // IFDEBUG
+                        Ext.Error.raise({
+                            plugin: 'Bancha',
+                            msg: 'Bancha.Localizer does not know how to replace %'+bits[i].substr(0,1)+' in string "'+key+'".'
+                        });
+                        // ENDIF
+                        result += '%'+bits[i].substr(0,1);
+                }
+                result += bits[i].substr(1);
+            }
+
+            return result;
+        }
+    },
+    /** 
+     * Translates an given string the current language
+     * (see {@link Bancha.Localizer.currentLang}.
+     *
+     * Additional arguments are used to replace %s (for string) and %d (for number).
+     *
+     * This is a convenience function for Bancha.Localizer.getLocalizedStringWithReplacements
+     * @param key the string to translate
+     * @param replacement1 An arbitrary number of additional strings to replace %s in the first one
+     * @member Bancha
+     */
+    t : function(key,  replacement1, replacement2, replacement3) {
+        return Bancha.Localizer.getLocalizedStringWithReplacements.apply(Bancha.Localizer, arguments);
     }
 });
 

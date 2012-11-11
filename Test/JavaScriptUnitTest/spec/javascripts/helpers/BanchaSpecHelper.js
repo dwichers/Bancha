@@ -1,11 +1,26 @@
-/*jslint browser: true, vars: true, undef: true, nomen: true, eqeqeq: false, plusplus: true, bitwise: true, regexp: true, newcap: true, immed: true */
-/*global Ext, Bancha, describe, it, beforeEach, expect, jasmine, BanchaSpecHelper */
+/*!
+ *
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
+ *
+ * Bancha specific helper functions
+ *
+ * @copyright     Copyright 2011-2012 StudioQ OG
+ * @link          http://banchaproject.org Bancha Project
+ * @author        Roland Schuetz <mail@rolandschuetz.at>
+ * @version       Bancha v PRECOMPILER_ADD_RELEASE_VERSION
+ *
+ * For more information go to http://banchaproject.org
+ */
+/*jslint browser: true, vars: true, undef: true, nomen: true, eqeq: false, plusplus: true, bitwise: true, regexp: true, newcap: true, sloppy: true, white: true */
+/*jshint bitwise:true, curly:true, eqeqeq:true, forin:true, immed:true, latedef:true, newcap:true, noarg:true, noempty:true, regexp:true, undef:true, trailing:false */
+/*global Ext, Bancha, describe, it, beforeEach, expect, jasmine, Mock, BanchaSpecHelper:true */
 
 /** helpers */
 BanchaSpecHelper = {};
 BanchaSpecHelper.SampleData = {};
 BanchaSpecHelper.SampleData.remoteApiDefinition = {
-    url: 'Bancha/router.json',
+    url: 'bancha-dispatcher-mock.js',
     namespace: 'Bancha.RemoteStubs',
     "type":"remoting",
     "actions":{
@@ -18,17 +33,18 @@ BanchaSpecHelper.SampleData.remoteApiDefinition = {
             "len":1
         },{
             "name":"create",
-	        "len":1
-	    },{
-	        "name":"update",
-	        "len":1
-	    },{
+            "len":1
+        },{
+            "name":"update",
+            "len":1
+        },{
             "name":"destroy",
             "len":1
         }]
     },
     metadata: {
         _UID: '550e8400e29b11d4a7164466554400004',
+        _CakeDebugLevel: 0, // set the debug level to zero to suppress Banchas debug error handling
         User: {
                 idProperty: 'id',
                 fields: [
@@ -41,9 +57,17 @@ BanchaSpecHelper.SampleData.remoteApiDefinition = {
                     {name:'weight', type:'float'},
                     {name:'height', type:'int'}
                 ],
-                //associations: [
-                    //{type:'hasMany', model:'Post', name:'posts'},
-                //],
+                associations: [
+                    {type:'hasMany', model:'Bancha.model.Post', name:'posts'}, // these models need to exist
+                    {type:'belongsTo', model:'Bancha.model.Country', name:'country'}
+                ],
+                validations: [
+                    { type:"numberformat", field:"id", precision:0},
+                    { type:"presence",     field:"name"},
+                    { type:"length",       field:'name', min: 2},
+                    { type:"length",       field:"name", max:64},
+                    { type:"format",       field:"login", matcher:"banchaAlphanum"}
+                ],
                 sorters: [{
                     property: 'name',
                     direction: 'ASC'
@@ -87,9 +111,9 @@ beforeEach(function() {
         toEqualConfig: function(expected) {
             var config = Ext.clone(this.actual);
             delete config.scaffold;
-            delete config.banchaLoadRecord;
+            delete config.scaffoldLoadRecord;
             delete config.scaffold;
-            delete config.scaffoldConfig; // depricated
+            delete config.scaffoldConfig; // deprecated
             delete config.enableCreate;
             delete config.enableUpdate;
             delete config.enableDestroy;
@@ -100,6 +124,20 @@ beforeEach(function() {
             return true;
         }
     });
+
+    // Bancha tries to connect to the api in debug mode, mimik that is works
+    // but there should never be any other Ajax requests
+    Ext.Ajax.request = function(config) {
+        if(config.url.search(BanchaSpecHelper.SampleData.remoteApiDefinition) !== -1) {
+            // this is a check of the bancha dispatcher, everything ok
+            return {
+                status: 200,
+                responseText: '{BanchaDispatcherIsSetup:true}'
+            };
+        } else {
+            throw new Error('Unexpected usage of Ext.Ajax.request');
+        }
+    };
 });
 
 //eof

@@ -1,17 +1,13 @@
 <?php
 /**
- * Bancha Project : Combining Ext JS and CakePHP (http://banchaproject.org)
- * Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
- *
- * Licensed under The MIT License
- * Redistributions of files must retain the above copyright notice.
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
  *
  * @package       Bancha
  * @subpackage    Lib.Network
- * @copyright     Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
+ * @copyright     Copyright 2011-2012 StudioQ OG
  * @link          http://banchaproject.org Bancha Project
  * @since         Bancha v 0.9.0
- * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
  * @author        Roland Schuetz <mail@rolandschuetz.at>
  * @author        Florian Eckerstorfer <f.eckerstorfer@gmail.com>
  */
@@ -42,7 +38,7 @@ class BanchaResponseTransformer {
 		}
         
 		if ($response === null) { // use the triple operator to not catch empty arrays
-			throw new CakeException("Please configure the {$modelName}Controllers {$request->action} function to include a return statement as described in the Bancha documentation");
+			throw new BanchaException("Please configure the {$modelName}Controllers {$request->action} function to include a return statement as described in the Bancha documentation");
 		}
 		
 		return BanchaResponseTransformer::transformDataStructureToExt($modelName,$response);
@@ -51,14 +47,14 @@ class BanchaResponseTransformer {
 	/**
 	 * Transform a cake response to extjs structure (associated models are not supported!)
 	 * otherwise just return the original response.
-	 * See also https://github.com/Bancha/Bancha/wiki/Supported-Controller-Method-Results
+	 * See also http://docs.banchaproject.org/resources/Supported-Controller-Method-Results.html
 	 *
 	 * @param $modelName The model name of the current request
 	 * @param $response The input request from Bancha
 	 * @param $controller The used controller
 	 * @return extjs formated data array
 	 */
-	public static function transformDataStructureToExt($modelName,$response) {
+	public static function transformDataStructureToExt($modelName, $response) {
 		
 		// understand primitive responses
 		if($response===true || $response===false) {
@@ -69,12 +65,12 @@ class BanchaResponseTransformer {
 		}
 		
 		// expect a successfull operation, but check
-		$sucess = isset($response['success']) ? !!$response['success'] : true;
+		$success = isset($response['success']) ? !!$response['success'] : true;
 		
 		if( isset($response[$modelName]) ) {
 			// this is standard cake single element structure
 			$response = array(
-				'success' => $sucess,
+				'success' => $success,
 				'data' => $response[$modelName]
 			);
 			
@@ -85,7 +81,7 @@ class BanchaResponseTransformer {
 				array_push($data, $record[$modelName]);
 			}
 			$response = array(
-				'success' => $sucess,
+				'success' => $success,
 				'data' => $data
 			);
 			
@@ -100,11 +96,19 @@ class BanchaResponseTransformer {
 
 			// create response including the total number of records
 			$response = array(
-				'success' => $sucess,
+				'success' => $success,
 				'data'  => isset($data['data']) ? $data['data'] : $data, // second option is for empty responses
 				'total' => $response['count']
 			);
+		} else if(is_array($response) && count($response)===0) {
+			// this is an empty array, so expect that this is just a request without any found records
+			return array(
+				'success' => true,
+				'data' => array()
+			);
 		}
+		// else the structure could not be recognized as any transformable data
+		// so output it as it is
 		
 		return $response;
 	}

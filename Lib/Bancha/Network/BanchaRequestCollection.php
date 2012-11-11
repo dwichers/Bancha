@@ -1,17 +1,13 @@
 <?php
 /**
- * Bancha Project : Combining Ext JS and CakePHP (http://banchaproject.org)
- * Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
- *
- * Licensed under The MIT License
- * Redistributions of files must retain the above copyright notice.
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
  *
  * @package       Bancha
  * @subpackage    Lib.Network
- * @copyright     Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
+ * @copyright     Copyright 2011-2012 StudioQ OG
  * @link          http://banchaproject.org Bancha Project
  * @since         Bancha v 0.9.0
- * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
  * @author        Florian Eckerstorfer <f.eckerstorfer@gmail.com>
  * @author        Andreas Kern <andreas.kern@gmail.com>
  * @author        Roland Schuetz <mail@rolandschuetz.at>
@@ -44,8 +40,8 @@ class BanchaRequestCollection {
  * @param array $postData Content of $_POST.
  */
 	public function __construct($rawPostData = '', $postData = array()) {
-		$this->rawPostData = $rawPostData;
-		$this->postData = $postData;
+		$this->rawPostData = $rawPostData; // when the enctype is "multipart/form-data", the rawPostData will be empty
+		$this->postData = $postData; // so we need the $_POST data as well for form submits with file uploads
 	}
 
 /**
@@ -55,20 +51,34 @@ class BanchaRequestCollection {
  * @return array Array with CakeRequest objects.
  */
 	public function getRequests() {
-		$requests = array();
-		// If the request comes from $HTTP_RAW_POST_DATA it could be a batch request.
-		if (strlen($this->rawPostData)) {
+
+		if(isset($this->postData) && isset($this->postData['extTID'])) {
+			// this is a form request, form request data is directly avialable 
+			// in the $postData and only contains one request.
+			$data = array($this->postData); // make an array of requests data
+
+		} else if(strlen($this->rawPostData)) {
+			// It is a normal Ext.Direct request, payload is read from php://input (saved in $rawPostData)
 			$data = json_decode($this->rawPostData, true);
-			// TODO: improve detection (not perfect, but should it should be correct in most cases.)
+			if($data === NULL) {
+				// payload could not be converted, probably misformed json
+				throw new BanchaException(
+					'Misformed Input: The Bancha Dispatcher expected a json string, instead got ' . $this->rawPostData);
+			}
 			if (isset($data['action']) || isset($data['method']) || isset($data['data'])) {
+				// this is just a single request, so make an array of requests data
 				$data = array($data);
 			}
+			// make sure that we keep the set in order
 			$data = Set::sort($data, '{n}.tid', 'asc');
 		} else {
-			// Form requests only contain one request.
-			$data = array($this->postData);
+			// no data passed
+			throw new BanchaException(
+				'Missing POST Data: The Bancha Dispatcher expected to get all requests in the Ext.Direct format as POST '.
+				'parameter, but there is no data in this request. You can not access this site directly!');
 		}
 
+		$requests = array();
 		if(count($data) > 0) {
 	 		for ($i=0; $i < count($data); $i++) {
 				$transformer = new BanchaRequestTransformer($data[$i]);
@@ -91,14 +101,12 @@ class BanchaRequestCollection {
 				$requests[$i]['plugin']			= null;
 				// bancha-specific
 				$requests[$i]['tid']			= $transformer->getTid();
-				$requests[$i]['extUpload']		= false; // quick fix disabled
+				$requests[$i]['extUpload']		= $transformer->getExtUpload();
 				$requests[$i]['client_id']		= $transformer->getClientId();
 				$requests[$i]['isFormRequest']	= $transformer->isFormRequest();
-				$requests[$i]['isBancha']		= true; // additional property for cleaner controller syntax
-				
-				// $requests[$i]['pass']			= array();
 				$requests[$i]['pass']			= $transformer->getPassParams();
-				// print_r($requests[$i]['pass']);
+				// additional property for cleaner controller syntax
+				$requests[$i]['isBancha']		= true;
 				
 				// Handle all other parameters as POST parameters.
 				foreach ($transformer->getCleanedDataArray() as $key => $value) {

@@ -9,20 +9,17 @@
  * CakePHP(tm) : Rapid Development Framework (http://cakephp.org)
  * Bancha : Ext JS and Cake PHP (http://banchaproject.org)
  * Copyright 2005-2010, Cake Software Foundation, Inc. (http://cakefoundation.org)
- * Copyright 2011, Bancha Project
- *
- * Licensed under The MIT License
- * Redistributions of files must retain the above copyright notice.
+ * Copyright 2011-2012, StudioQ OG
  *
  * @copyright     Copyright 2005-2010, Cake Software Foundation, Inc. (http://cakefoundation.org)
- * @copyright	  Copyright 2011, Bancha Project (http://banchaproject.org)
+ * @copyright	  Copyright 2011-2012 StudioQ OG
+ * @author        Roland Schuetz <mail@rolandschuetz.at>
  * @author        Florian Eckerstorfer <f.eckerstorfer@gmail.com>
  * @link          http://cakephp.org CakePHP(tm) Project
  * @link 		  http://banchaproject.org Bancha Project
- * @package       bancha
- * @subpackage    bancha.app.webroot
+ * @package       Bancha
+ * @subpackage    Bancha.app.webroot
  * @since         CakePHP(tm) v 0.2.9
- * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
  */
 
 
@@ -115,8 +112,9 @@ if(isset($_GET['setup-check']) && $_GET['setup-check']) {
 		return;
 	} else {
 		$Dispatcher = new BanchaDispatcher();
+		$raw_post_data = file_get_contents("php://input");
 		$Dispatcher->dispatch(new BanchaRequestCollection(
-			isset($HTTP_RAW_POST_DATA) ? $HTTP_RAW_POST_DATA : '',
+			$raw_post_data  ? $raw_post_data : '',
 			isset($_POST) ? $_POST : array()
 		));
 	}

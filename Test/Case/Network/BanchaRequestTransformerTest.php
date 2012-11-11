@@ -1,22 +1,27 @@
 <?php
 /**
- * Bancha Project : Combining Ext JS and CakePHP (http://banchaproject.org)
- * Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
- *
- * Licensed under The MIT License
- * Redistributions of files must retain the above copyright notice.
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
  *
  * @package       Bancha
  * @category      tests
- * @copyright     Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
+ * @copyright     Copyright 2011-2012 StudioQ OG
  * @link          http://banchaproject.org Bancha Project
  * @since         Bancha v 0.9.0
- * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
  * @author        Florian Eckerstorfer <f.eckerstorfer@gmail.com>
  * @author        Roland Schuetz <mail@rolandschuetz.at>
  */
 
 App::uses('BanchaRequestTransformer', 'Bancha.Bancha/Network');
+
+/**
+ * Expose method for tests
+ */
+class TestBanchaRequestTransformerTest extends BanchaRequestTransformer {
+	public function publicIsArray($variable, $path) {
+		return $this->isArray($variable, $path);
+	}
+}
 
 /**
  * BanchaRequestTransformerTest
@@ -25,7 +30,51 @@ App::uses('BanchaRequestTransformer', 'Bancha.Bancha/Network');
  * @category      tests
  */
 class BanchaRequestTransformerTest extends CakeTestCase {
-	
+
+/**
+ * Test the helper function
+ */
+	public function testIsArray() {
+		$cls = new TestBanchaRequestTransformerTest();
+
+		// check with no path
+		$this->assertFalse($cls->publicIsArray(true, ''));
+		$this->assertFalse($cls->publicIsArray('string', ''));
+		$this->assertTrue($cls->publicIsArray(array(), ''));
+
+		// check with parts, both integer and string properties
+		$this->assertFalse($cls->publicIsArray(array(
+			'string'
+		), '[data]'));
+		$this->assertFalse($cls->publicIsArray(array(
+			'data' => 'string'
+		), '[data]'));
+		$this->assertTrue($cls->publicIsArray(array(
+			'data' => array('string')
+		), '[data]'));
+
+		$this->assertFalse($cls->publicIsArray(array(
+			'string'
+		), '[0]'));
+		$this->assertTrue($cls->publicIsArray(array(
+			array('string')
+		), '[0]'));
+
+		$this->assertFalse($cls->publicIsArray(array(array(
+			array('string')
+		)), '[0][data]'));
+		$this->assertTrue($cls->publicIsArray(array(array(
+			'data' => array('string')
+		)), '[0][data]'));
+
+		$this->assertTrue($cls->publicIsArray(array(array(
+			'data' => array(array('string'))
+		)), '[0][data][0]'));
+		$this->assertTrue($cls->publicIsArray(array(array(
+			'data' => array(array(
+				'data' => array('string')))
+		)), '[0][data][0][data]'));
+	}
 /**
  * Test input transformation of simple data
  */
@@ -341,6 +390,12 @@ class BanchaRequestTransformerTest extends CakeTestCase {
 		$this->assertEquals($paging['page'], $cakePaginate['page']);
 		$this->assertEquals($paging['limit'], $cakePaginate['limit']);
 		$this->assertEquals($paging['order'], $cakePaginate['order']);
+		if(isset($cakePaginate['sort'])) {
+			$this->assertEquals($paging['sort'], $cakePaginate['sort']);
+		}
+		if(isset($cakePaginate['direction'])) {
+			$this->assertEquals($paging['direction'], $cakePaginate['direction']);
+		}
 	}
 
 /**
@@ -481,8 +536,10 @@ class BanchaRequestTransformerTest extends CakeTestCase {
 					'page'		=> 2,
 					'limit'		=> 10,
 					'order'		=> array(
-						'Tests.title'	=> 'asc',
+						'Test.title'	=> 'asc',
 					),
+					'sort'      => 'title',
+					'direction' => 'ASC'
 				),
 			),
 			// page = start / limit

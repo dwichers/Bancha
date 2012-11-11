@@ -1,11 +1,20 @@
 /*!
- * Bancha Tests
- * Copyright(c) 2011-2012 Roland Schuetz
- * @author Roland Schuetz <mail@rolandschuetz.at>
- * @copyright (c) 2011-2012 Roland Schuetz
+ *
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
+ *
+ * Tests for the main Bancha class
+ *
+ * @copyright     Copyright 2011-2012 StudioQ OG
+ * @link          http://banchaproject.org Bancha Project
+ * @author        Roland Schuetz <mail@rolandschuetz.at>
+ * @version       Bancha v PRECOMPILER_ADD_RELEASE_VERSION
+ *
+ * For more information go to http://banchaproject.org
  */
-/*jslint browser: true, vars: true, plusplus: true, white: true, sloppy: true */
-/*global Ext, Bancha, describe, it, beforeEach, expect, jasmine, Mock, BanchaSpecHelper */
+/*jslint browser: true, vars: true, undef: true, nomen: true, eqeq: false, plusplus: true, bitwise: true, regexp: true, newcap: true, sloppy: true, white: true */
+/*jshint bitwise:true, curly:true, eqeqeq:true, forin:true, immed:true, latedef:true, newcap:true, noarg:true, noempty:true, regexp:true, undef:true, trailing:false */
+/*global Ext, Bancha, describe, it, beforeEach, expect, jasmine, Mock, ExtSpecHelper, BanchaSpecHelper, BanchaObjectFromPathTest */
 
 describe("Bancha Singleton - basic retrieval functions on the stubs and model meta data", function() {
         var rs = BanchaSpecHelper.SampleData.remoteApiDefinition, // remote sample
@@ -54,7 +63,27 @@ describe("Bancha Singleton - basic retrieval functions on the stubs and model me
             expect(ns.User).toBeDefined();
             expect(ns.User.create).toBeDefined(); // looks good
         });
-    
+
+        it("should return a stubs on getStub(), if defined", function() {
+            h.init();
+            
+            expect(Bancha.getStub('User')).toEqual(Bancha.getStubsNamespace().User);
+            
+            try {
+                expect(Bancha.getStub('DoesntExist')).toBeUndefined();
+            } catch(e) {
+                // in debug mode it throws an error
+                // perfect
+            }
+        });
+
+        it("should initialize Bancha, if getStub() is used", function() {
+            Bancha.REMOTE_API = Ext.clone(BanchaSpecHelper.SampleData.remoteApiDefinition);
+
+            expect(Bancha.initialized).toBeFalsy();
+            expect(Bancha.getStub('User')).toEqual(Bancha.getStubsNamespace().User);
+            expect(Bancha.initialized).toBeTruthy();
+        });
     
         it("should in debug mode return an expection when calling getRemoteApi() before init()", function() {
             if(Bancha.debugVersion) {
@@ -120,7 +149,7 @@ describe("Bancha Singleton - basic retrieval functions on the stubs and model me
             expect(Bancha.getModelMetaData('Phantasy')).toBeNull(); // doesn't exist
             expect(Bancha.getModelMetaData('User')).property('fields.2.name').toEqual('login'); // it's really the metadata
         });
-    
+
     
         it("should preload model meta data using the direct stub", function() {
             h.init();
@@ -225,20 +254,26 @@ describe("Bancha Singleton - basic retrieval functions on the stubs and model me
 
             // create a mock object for the proxy
             var mockProxy = Mock.Proxy();
-
+            
             // should create a user defintion
             expect(
                 Bancha.createModel('CreateModelUser', {
                     additionalSettings: true,
                     proxy: mockProxy
             })).toBeTruthy();
-
+            
             // check if the model really got created
             var model = Ext.ClassManager.get('Bancha.model.CreateModelUser');
             expect(model).toBeModelClass('Bancha.model.CreateModelUser');
             
             // check if the additional config was used
-            expect(model.prototype.additionalSettings).toBeTruthy();
+            if(ExtSpecHelper.isExt) {
+                // for ext it is directly applied
+                expect(model.prototype.additionalSettings).toBeTruthy();
+            } else {
+                // for touch it is applied inside the 'config' config
+                expect(model.prototype.config.additionalSettings).toBeTruthy();
+            }
 
             // test if the model saves data through ext direct
             var user = Ext.create('Bancha.model.CreateModelUser',{
@@ -252,9 +287,12 @@ describe("Bancha Singleton - basic retrieval functions on the stubs and model me
 
             // test
             user.save();
-
+            
             //verify the expectations were met
+            // TODO Not yet working in touch: http://www.sencha.com/forum/showthread.php?188764-How-to-mock-a-proxy
+            if(ExtSpecHelper.isExt)
             mockProxy.verify();
+            
         });
 
         it("should create a model if not defined with Bancha.getModel", function() {
@@ -282,8 +320,24 @@ describe("Bancha Singleton - basic retrieval functions on the stubs and model me
              // now test getModel
              var model = Bancha.getModel('GetModelJustGetTestUser');
              expect(model).toBeModelClass('Bancha.model.GetModelJustGetTestUser');
-             expect(model.prototype.createdWithCreate).toBeTruthy();
              
+             // check if it has the correct config
+             if(ExtSpecHelper.isExt) {
+                 // for ext configs are directly applied
+                 expect(model.prototype.createdWithCreate).toBeTruthy();
+             } else {
+                 // for touch configs are applied inside the 'config' config
+                 expect(model.prototype.config.createdWithCreate).toBeTruthy();
+             }
+             
+        });
+
+        it("should initialize Bancha, if getModel() is used", function() {
+            Bancha.REMOTE_API = Ext.clone(BanchaSpecHelper.SampleData.remoteApiDefinition);
+
+            expect(Bancha.initialized).toBeFalsy();
+            expect(Bancha.getModel('User')).toBeTruthy();
+            expect(Bancha.initialized).toBeTruthy();
         });
 
         it("should load all needed models on onModelReady and fire functions after the model is ready for a single modelname input", function() {
