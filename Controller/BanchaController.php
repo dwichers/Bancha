@@ -1,18 +1,14 @@
 <?php
 
 /**
- * Bancha Project : Combining Ext JS and CakePHP (http://banchaproject.org)
- * Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
- *
- * Licensed under The MIT License
- * Redistributions of files must retain the above copyright notice.
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
  *
  * @package       Bancha
  * @subpackage    Controller
- * @copyright     Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
+ * @copyright     Copyright 2011-2012 StudioQ OG
  * @link          http://banchaproject.org Bancha Project
  * @since         Bancha v 0.9.0
- * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
  * @author        Florian Eckerstorfer <florian@theroadtojoy.at>
  * @author        Andreas Kern <andreas.kern@gmail.com>
  * @author        Roland Schuetz <mail@rolandschuetz.at>
@@ -40,20 +36,12 @@ class BanchaController extends BanchaAppController {
 	public $autoRender = false; //we don't need a view for this
 	public $autoLayout = false;
 	
-	// enable auth component if configured
-	public function __construct($request = null, $response = null) {
-		if(is_array(Configure::read('Bancha.Api.AuthConfig'))) {
-			$this->components['Auth'] = Configure::read('Bancha.Api.AuthConfig');
-		}
-		parent::__construct($request, $response);
-	}
-	
 	/**
-	 * the index method is called by default by cakePHP if no action is specified,
+	 * The index method is called by default by cakePHP if no action is specified,
 	 * it will print the API for the Controllers which have the Bancha-
 	 * Behavior set. This will not include any model meta data. to specify which
 	 * model meta data should be printed you will have to pass the model name or 'all'
-	 * For more see [how to adopt the layout](https://github.com/Bancha/Bancha/wiki/Installation)
+	 * For more see [how to adopt the layout](http://docs.banchaproject.org/resources/Installation.html#setting-up-extjs)
 	 *
 	 * @param string $metadataFilter Models that should be exposed through the Bancha API. Either all or [all] for
 	 *                                  all models or a comma separated list of models.
@@ -66,32 +54,56 @@ class BanchaController extends BanchaAppController {
 		// send as javascript
 		$this->response->type('js');
 		
-		$remotableModels = $banchaApi->getRemotableModels();
-        $metadataModels = $banchaApi->filterRemotableModels($remotableModels, $metadataFilter);
+		// send an _CakeError property to the frontend
+		$error = false;
+
+		// get all possible remotable models
+		$remotableModels = $this->getRemotableModels($banchaApi);
 		
-		$api = array(
-			'url'		=> $this->request->webroot.'bancha.php',
-			'namespace'	=> Configure::read('Bancha.Api.stubsNamespace'),
-    		'type'		=> 'remoting',
-    		'metadata'	=> $banchaApi->getMetadata($metadataModels),
-    		'actions'	=> array_merge_recursive(
-				$banchaApi->getRemotableModelActions($remotableModels),
+		//get all the remotable model actions, this can throw an error on missconfiguration
+		$remotableModelsActions = array();
+		try {
+			$remotableModelsActions = $banchaApi->getRemotableModelActions($remotableModels);
+		} catch(MissingControllerException $e) {
+			$error  = 'You have exposed a model with BanchaRemotable, so Bancha requires the corresponding controller to exist.<br />';
+			$error .= '<br />Bancha looks at this controller to see which CRUD functions should be exposed. <b>But the '.$e->getMessage().'</b>';
+			$error .= '<br />Please create this controller!';
+		}
+
+		// build actions
+		if(($actions = Cache::read('actions', '_bancha_api_')) === false) {
+			$actions = array_merge_recursive(
+				$remotableModelsActions,
 				$banchaApi->getRemotableMethods(),
+				// plugin folders are not searched, so all out exposed functions manually
 				array('Bancha' => array(
 					array(
 						'name'	=> 'loadMetaData',
 						'len'	=> 1,
 					),
+					array(
+						'name'	=> 'logError',
+						'len'	=> 1,
+					),
 				))
-			)
+			);
+			
+			// cache for future requests
+			Cache::write('actions', $actions, '_bancha_api_');
+		}
+		
+		$api = array(
+			'url'		=> $this->request->webroot.'bancha-dispatcher.php',
+			'namespace'	=> Configure::read('Bancha.Api.stubsNamespace'),
+			'type'		=> 'remoting',
+			'metadata'	=> array_merge(
+								$this->getMetadata($banchaApi,$remotableModels, $metadataFilter),
+								array('_CakeError' => Configure::read('debug')==0 ? !!$error : $error)), // send the text only in debug mode
+			'actions'	=> $actions
 		);
 		
-		$remoteApiNamespace = Configure::read('Bancha.remote_api');
-		if(empty($remoteApiNamespace)) {
-			$remoteApiNamespace = 'Bancha.REMOTE_API';
-		}
-
-		$this->response->body(sprintf("Ext.ns('Bancha');\n%s=%s", $remoteApiNamespace, json_encode($api)));
+		// no extra view file needed, simply output
+		$this->response->body(sprintf("Ext.ns('Bancha');\n%s=%s", Configure::read('Bancha.Api.remoteApiNamespace'), json_encode($api)));
 	}
 
 	/**
@@ -103,27 +115,89 @@ class BanchaController extends BanchaAppController {
 	 * @return array 
 	 */
 	public function loadMetaData() {
-		$models = array();
-		if(isset($this->params['data'][0])) {
-			$models = $this->params['data'][0];
-		}
-		
+		$models = isset($this->params['data'][0]) ? $this->params['data'][0] : null;
 		if ($models == null) {
 			return;
 		}
-
-		if ( is_string($models)) {
-			$models = array($models);
+		
+		// get the result
+		$banchaApi = new BanchaApi();
+		return $this->getMetaData(new BanchaApi(), $this->getRemotableModels($banchaApi), $models);
+	}
+	
+	
+	/**
+	 * This function decorates the BanchaApi::getRemotableModels() method with caching
+	 * @return see BanchaApi::getRemotableModels
+	 */
+	private function getRemotableModels($banchaApi) {
+		if(($remotableModels = Cache::read('remotable_models', '_bancha_api_')) !== false) {
+			return $remotableModels;
 		}
-		$modelMetaData = array();
-		foreach($models as $mod) {
-			$mod =  Inflector::Singularize($mod);
-			$mod = ucfirst($mod);
-			$this->loadModel($mod);
-			$this->{$mod}->setBehaviorModel($mod);
-			$modelMetaData[$mod] = $this->{$mod}->extractBanchaMetaData();
-
+		
+		// get remotable models (iterates through all models)
+		$remotableModels = $banchaApi->getRemotableModels();
+		Cache::write('remotable_models', $remotableModels, '_bancha_api_');
+		
+		return $remotableModels;
+	}
+	
+	/**
+	 * This function decorates the BanchaApi::getMetadata() method with caching
+	 * @return see BanchaApi::getMetadata
+	 */
+	private function getMetaData($banchaApi, $remotableModels, $metadataFilter) {
+		// filter the models (performant function)
+		$metadataModels = $banchaApi->filterRemotableModels($remotableModels, $metadataFilter);
+		
+		// build a caching key, make sure we are always using the right models
+		$cacheKey = 'metadata_'.md5(implode(",", $metadataModels)); // md5 for shorter file names
+		
+		// check cache
+		if(($metadata = Cache::read($cacheKey, '_bancha_api_')) !== false) {
+			return $metadata;
 		}
-		return $modelMetaData;
+		
+		// execute unperformant request
+		$metadata = $banchaApi->getMetadata($metadataModels);
+		
+		// cache for next time
+		Cache::write($cacheKey, $metadata, '_bancha_api_');
+		
+		return $metadata;
+	}
+	
+	/**
+	 * This function returns all translations, known to cakephp in the defiend language
+	 * The default domain is 'bancha', but can be overwritten
+	 */
+	public function translations($languageCode, $domain='bancha') {
+
+		App::uses('I18n', 'I18n');
+		$i18n = I18n::getInstance();
+
+		// force cake to load the correct language file
+		$i18n->translate('whatever', 'whatever', $domain, false, 1, $languageCode);
+
+		// get the translations
+		$domains = $i18n->domains();
+		$translations = $domains[$domain][$languageCode]['LC_MESSAGES'];
+
+		// transform
+		$jsTranslations = array();
+		foreach($translations as $key=>$value) {
+			array_push($jsTranslations, array('key'=>$key,'value'=>$value));
+		}
+
+		// no extra view file needed, simply output
+		$this->response->body(json_encode($jsTranslations));
+    }
+
+	/**
+	 * This function logs an javascript error to the js_error.log
+	 */
+	public function logError($error) {
+		$this->log($error,'js_error');
+		return true;
 	}
 }

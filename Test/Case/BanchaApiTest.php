@@ -1,17 +1,14 @@
 <?php
 /**
- * Bancha Project : Combining Ext JS and CakePHP (http://banchaproject.org)
- * Copyright 2011-2012, Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
- *
- * Licensed under The MIT License
- * Redistributions of files must retain the above copyright notice.
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
  *
  * @package       Bancha
  * @category      tests
- * @copyright     Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
+ * @copyright     Copyright 2011-2012 StudioQ OG
  * @link          http://banchaproject.org Bancha Project
  * @since         Bancha v 0.9.0
- * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
+ * @author        Roland Schuetz <mail@rolandschuetz.at>
  * @author        Florian Eckerstorfer <f.eckerstorfer@gmail.com>
  */
 
@@ -72,6 +69,12 @@ class BanchaApiTest extends CakeTestCase {
 		$this->assertCount(2, $filteredModels);
 		$this->assertContains('User', $filteredModels);
 		$this->assertContains('Article', $filteredModels);
+		
+		// expose two models (alternative usage)
+		$filteredModels = $api->filterRemotableModels($remotableModels, array('User','Article'));
+		$this->assertCount(2, $filteredModels);
+		$this->assertContains('User', $filteredModels);
+		$this->assertContains('Article', $filteredModels);
 
 		// expose no models
 		$filteredModels = $api->filterRemotableModels($remotableModels, '');
@@ -96,10 +99,11 @@ class BanchaApiTest extends CakeTestCase {
 	{
 		$api = new BanchaApi();
 		$metadata = $api->getMetadata(array('User', 'Article'));
-		$this->assertCount(3, $metadata);
+		$this->assertCount(4, $metadata);
 		$this->assertArrayHasKey('User', $metadata);
 		$this->assertArrayHasKey('Article', $metadata);
 		$this->assertArrayHasKey('_UID', $metadata);
+		$this->assertArrayHasKey('_CakeDebugLevel', $metadata);
 		$this->assertTrue(is_array($metadata['User']));
 		$this->assertTrue(is_array($metadata['Article']));
 		$this->assertTrue(strlen($metadata['_UID']) > 0);
@@ -147,7 +151,6 @@ class BanchaApiTest extends CakeTestCase {
 		$this->assertCount(6, $remotableActions['Article']);
 		$this->assertEquals('getAll', $remotableActions['Article'][0]['name']);
 	}
-
 }
 
 

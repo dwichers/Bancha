@@ -1,17 +1,13 @@
 <?php
 /**
- * Bancha Project : Combining Ext JS and CakePHP (http://banchaproject.org)
- * Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
- *
- * Licensed under The MIT License
- * Redistributions of files must retain the above copyright notice.
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
  *
  * @package       Bancha
  * @subpackage    Lib.Routing
- * @copyright     Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
+ * @copyright     Copyright 2011-2012 StudioQ OG
  * @link          http://banchaproject.org Bancha Project
  * @since         Bancha v 0.9.0
- * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
  * @author        Roland Schuetz <mail@rolandschuetz.at>
  * @author        Florian Eckerstorfer <f.eckerstorfer@gmail.com>
  */
@@ -41,7 +37,7 @@ class BanchaSingleDispatcher extends Dispatcher {
 * @param Controller $controller Controller to invoke
 * @param CakeRequest $request The request object to invoke the controller for.
 * @param CakeResponse $response The response object to receive the output
-* @return void
+* @return CakeResponse te resulting response object
  */
 	protected function _invoke(Controller $controller, CakeRequest $request, CakeResponse $response) {
 		$controller->constructClasses();
@@ -67,20 +63,47 @@ class BanchaSingleDispatcher extends Dispatcher {
 		$response->send();
 	}
 
+
 	/**
 	 * Applies additionalParameters to the request to be dispatched. Unlike Dispatcher, BanchaSingleDispatcher does not
 	 * applies the routes.
+	 * 
+	 * This function supports the old before 2.2 and the new 2.2+ calls, and calls correct function.
+	 *
+	 */
+	public function parseParams($requestOrEvent, $additionalParams = array()) {
+		if (is_a($requestOrEvent, 'CakeRequest')) {
+			return $this->parseParamsBefore22($requestOrEvent, $additionalParams);
+		} else {
+			$this->parseParamsAfter22($requestOrEvent);
+		}
+	}
+	/**
+	 * This function will be used for CakePHP 2.0.0 till 2.1.5
 	 *
 	 * @param CakeRequest $request CakeRequest object to mine for parameter information.
 	 * @param array $additionalParams An array of additional parameters to set to the request.
 	 *   Useful when Object::requestAction() is involved
 	 * @return CakeRequest The request object with routing params set.
 	 */
-	public function parseParams(CakeRequest $request, $additionalParams = array()) {
+	private function parseParamsBefore22(CakeRequest $request, $additionalParams = array()) {
 		if (!empty($additionalParams)) {
 			$request->addParams($additionalParams);
 		}
 		return $request;
 	}
 
+	/**
+	 * This function will be used for CakePHP 2.2.0+
+	 *
+	 * @param CakeEvent $event containing the request, response and additional params
+	 * @return void
+	 */
+	private function parseParamsAfter22($event) {
+		$request = $event->data['request'];
+
+		if (!empty($event->data['additionalParams'])) {
+			$request->addParams($event->data['additionalParams']);
+		}
+	}
 }

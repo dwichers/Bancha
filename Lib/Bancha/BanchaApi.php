@@ -1,5 +1,24 @@
 <?php
+/**
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
+ *
+ * @package       Bancha
+ * @subpackage    Lib
+ * @copyright     Copyright 2011-2012 StudioQ OG
+ * @link          http://banchaproject.org Bancha Project
+ * @since         Bancha v 0.9.3
+ * @author        Florian Eckerstorfer <f.eckerstorfer@gmail.com>
+ * @author        Roland Schuetz <mail@rolandschuetz.at>
+ */
 
+/**
+ * BanchaApi
+ * A Helper class for building the bancha-enhanced Ext.Direct API.
+ *
+ * @package       Bancha
+ * @subpackage    Lib
+ */
 class BanchaApi {
 
 	/**
@@ -30,7 +49,8 @@ class BanchaApi {
 		foreach ($models as $modelClass) {
 			$model = $this->loadModel($modelClass);
 			if (isset($model->actsAs) && is_array($model->actsAs)) {
-				if (in_array('Bancha.BanchaRemotable', $model->actsAs)) {
+				// check if it is remotable (first when a AppModel behavior is also defined, second when not)
+				if (array_key_exists('Bancha.BanchaRemotable', $model->actsAs) || in_array('Bancha.BanchaRemotable', $model->actsAs)) {
 					$remotableModels[] = $modelClass;
 				}
 			}
@@ -43,8 +63,8 @@ class BanchaApi {
 	 * list of models given in $filter. If $filter is NULL or an empty string an empty array is returned.
 	 *
 	 * @param  array  $models List of remotable models
-	 * @param  string $filter Explicit list of remotable models. Can be "all", "[all]" or "[Model1,Model2,...]" (without 
-	 *                        quotes).
+	 * @param  string/array $filter Explicit list of remotable models. Can be "all", "[all]" or "[Model1,Model2,...]" (without 
+	 *                        quotes). Or an array of models.
 	 * @return array          Filtered list of remotable models.
 	 */
 	public function filterRemotableModels($models, $filter)
@@ -57,11 +77,18 @@ class BanchaApi {
 		}
 
 		// First remove the [ and ], then split by comma and trim each element.
-		if (false !== strpos($filter, '[') && false !== strpos($filter, ']'))
+		if (is_string($filter) && false !== strpos($filter, '[') && false !== strpos($filter, ']'))
 		{
 			$filter = substr($filter, 1, -1);
 		}
-		$filteredModels = array_map('trim', explode(',', $filter));
+		
+		// transform string to array
+		$filteredModels = is_string($filter) ? explode(',', $filter) : $filter;
+		
+		// trim to prevent errors from unclean developer code
+		$filteredModels = array_map('trim', $filteredModels);
+		
+		// check if they really exist
 		foreach ($filteredModels as $filteredModel)
 		{
 			if (!in_array($filteredModel, $models))
@@ -83,10 +110,10 @@ class BanchaApi {
 		$metadata = array();
 		foreach ($models as $modelClass) {
 			$model = $this->loadModel($modelClass);
-			$model->setBehaviorModel($modelClass);
-			$metadata[$modelClass] = $model->extractBanchaMetaData();
+			$metadata[$modelClass] = $model->extractBanchaMetaData($modelClass);
 		}
 		$metadata['_UID'] = str_replace('.', '', uniqid('', true));
+		$metadata['_CakeDebugLevel'] = Configure::read('debug');
 		return $metadata;
 	}
 
@@ -114,19 +141,19 @@ class BanchaApi {
 	public function getCrudActionsOfController($controllerClass) {
 		$methods = $this->getClassMethods($controllerClass);
 
-		$formHandler = false;
+		$addFormHandler = false;
 		$crudActions = array();
 		foreach ($methods as $method) {
 			if ('add' === $method->name || 'edit' == $method->name) {
-				$formHandler = true;
+				$addFormHandler = true;
 			}
 			if (isset($this->crudMapping[$method->name])) {
 				$crudActions[] = $this->crudMapping[$method->name];
 			}
 		}
 
-		// If this controller has a form handler, add it to the crud actions.
-		if ($formHandler) {
+		// If this controller supports a form handler submit, add it to the crud actions.
+		if ($addFormHandler) {
 			$crudActions[] = array(
 				'name'			=> 'submit',
 				'len' 			=> 1,
@@ -208,14 +235,13 @@ class BanchaApi {
 		include_once APP . DS . 'Controller' . DS . $controllerClass . '.php';
 
 		if (!class_exists($controllerClass)) {
-			throw new MissingControllerExceptionarray(array('class' => $controllerClass));
+			throw new MissingControllerException(array('class' => $controllerClass));
 		}
 	}
 
 	protected function getClassMethods($class) {
 		$reflection = new ReflectionClass($class);
-		return $reflection->getMethods();
+		return $reflection->getMethods(ReflectionMethod::IS_PUBLIC);
 	}
-
 }
 

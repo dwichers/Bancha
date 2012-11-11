@@ -2,18 +2,14 @@
 /**
  * BanchaCrudTest file.
  *
- * Bancha Project : Combining Ext JS and CakePHP (http://banchaproject.org)
- * Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
- *
- * Licensed under The MIT License
- * Redistributions of files must retain the above copyright notice.
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
  *
  * @package       Bancha
  * @category      Tests
- * @copyright     Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
+ * @copyright     Copyright 2011-2012 StudioQ OG
  * @link          http://banchaproject.org Bancha Project
  * @since         Bancha v 0.9.0
- * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
  * @author        Florian Eckerstorfer <f.eckerstorfer@gmail.com>
  * @author        Roland Schuetz <mail@rolandschuetz.at>
  */
@@ -49,6 +45,12 @@ class BanchaCrudTest extends CakeTestCase {
 
 	public function testAdd() {
 		
+		$config = ConnectionManager::enumConnectionObjects();
+		$this->skipIf(
+			$config['default']['datasource'] ===  'Database/Sqlite',
+			'Default database needs to be persistent for this test' 
+		);
+
 		// Build a request like it looks in Ext JS.
 		$rawPostData = json_encode(array(array(
 			'action'		=> 'Article',
@@ -67,6 +69,7 @@ class BanchaCrudTest extends CakeTestCase {
 			new BanchaRequestCollection($rawPostData), array('return' => true)
 		));
 		
+		$this->assertTrue(isset($responses[0]->result), 'Expected an result for first request, instead $responses is '.print_r($responses,true));
 		$this->assertNotNull($responses[0]->result->data->id);
 		$this->assertEquals('Hello World', $responses[0]->result->data->title);
 		$this->assertEquals(false, $responses[0]->result->data->published);
@@ -164,7 +167,6 @@ class BanchaCrudTest extends CakeTestCase {
 	
 	
 	public function testSubmit_WithUpload() {
-		$this->markTestSkipped("File uploads are currently not supported.");
 		// used fixture:
 		// array('id' => 988, 'title' => 'Title 1', 'body' => 'Text 3, ...)
 
@@ -461,6 +463,7 @@ class BanchaCrudTest extends CakeTestCase {
 		));
 
 		// general response checks (check dispatcher, collections and transformers)
+		$this->assertTrue(isset($responses[0]->result), 'Expected an action proptery on first response, instead $responses is '.print_r($responses,true));
 		$this->assertEquals('Article', $responses[0]->action);
 		$this->assertEquals('create', $responses[0]->method);
 		$this->assertEquals('rpc', $responses[0]->type);

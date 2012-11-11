@@ -2,32 +2,25 @@
 /**
  * BanchExceptionsTest file.
  *
- * Bancha Project : Combining Ext JS and CakePHP (http://banchaproject.org)
- * Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
- *
- * Licensed under The MIT License
- * Redistributions of files must retain the above copyright notice.
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
  *
  * @package       Bancha
  * @category      Tests
- * @copyright     Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
+ * @copyright     Copyright 2011-2012 StudioQ OG
  * @link          http://banchaproject.org Bancha Project
  * @since         Bancha v 0.9.0
- * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
  * @author        Roland Schuetz <mail@rolandschuetz.at>
  */
 
 App::uses('BanchaDispatcher', 'Bancha.Bancha/Routing');
 App::uses('BanchaRequestCollection', 'Bancha.Bancha/Network');
-
 App::uses('ArticlesController', 'Controller');
-
-// require_once dirname(__FILE__) . '/ArticlesController.php';
 
 /**
  * BanchaDebugExceptionsTest. Tests if the Exception to help the user develop are thrown correctly
  *
- * @package       Bancha
+ * @package       Bancha.Test.Case.System
  * @category      Tests
  */
 class BanchaDebugExceptionsTest extends CakeTestCase {
@@ -59,7 +52,7 @@ class BanchaDebugExceptionsTest extends CakeTestCase {
 		
 		// check exception
 		$this->assertEquals('exception', $responses[0]->type);
-		$this->assertEquals('CakeException', $responses[0]->exceptionType);
+		$this->assertEquals('BanchaException', $responses[0]->exceptionType);
 	}
 	
 /**
@@ -67,7 +60,7 @@ class BanchaDebugExceptionsTest extends CakeTestCase {
  * If this is happening tell the developer that he probably did an error.
  * This exception is trown in BanchaRequestTransformer::transformDataStructureToCake()
  *
- * @expectedException CakeException
+ * @expectedException BanchaException
  */
 	public function testMultipleRecordInputException() {
 		$this->getResultForMethod('returnTrue', array(array(
@@ -117,7 +110,7 @@ class BanchaDebugExceptionsTest extends CakeTestCase {
 /**
  * DebugExceptionsController, has many errors a developer can make
  *
- * @package       Bancha
+ * @package       Bancha.Test.Case.System
  * @category      TestFixtures
  */
 class DebugExceptionsController extends ArticlesController {

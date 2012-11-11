@@ -2,16 +2,14 @@
 /**
  * BanchaRemotableBehaviorTest test models file.
  *
- * Bancha Project : Combining Ext JS and CakePHP (http://banchaproject.org)
- * Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
  *
- * Licensed under The MIT License
- * Redistributions of files must retain the above copyright notice.
- *
- * @copyright     Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
+ * @package       Bancha.Test.Case.Model
+ * @category      tests
+ * @copyright     Copyright 2011-2012 StudioQ OG
  * @link          http://banchaproject.org Bancha Project
  * @since         Bancha v 0.9.0
- * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
  * @author        Roland Schuetz <mail@rolandschuetz.at>
  * @author        Florian Eckerstorfer <f.eckerstorfer@gmail.com>
  */
@@ -153,6 +151,13 @@ class TestUser extends CakeTestModel {
 	);
 }
 
+/**
+ *
+ * @package       Bancha.Test.Case.Model
+ * @category      tests
+ *
+ */
+
 class TestUserOrder extends CakeTestModel {
 	public $name = 'User';
 	public $useTable = false; //users
@@ -250,11 +255,31 @@ class TestUserOrder extends CakeTestModel {
 	);
 	
 	
-	function schema() {
+	/**
+	 * Returns an array of table metadata (column names and types) for testing.
+	 * $field => keys(type, null, default, key, length, extra)
+	 *
+	 * @param boolean|string $field Set to true to reload schema, or a string to return a specific field
+	 * @return array Array of table metadata
+	 */
+	function schema($field = false) {
+		if (is_string($field)) {
+			if (isset($this->_schema[$field])) {
+				return $this->_schema[$field];
+			} else {
+				return null;
+			}
+		}
 		return $this->_schema;
 	}
 }
 	
+/**
+ *
+ * @package       Bancha.Test.Case.Model
+ * @category      tests
+ *
+ */
 
 class TestUserRelationships extends CakeTestModel {
 

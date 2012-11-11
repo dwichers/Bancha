@@ -2,16 +2,12 @@
 /**
  * BanchaControllerTest file.
  *
- * Bancha Project : Combining Ext JS and CakePHP (http://banchaproject.org)
- * Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
+ * Bancha Project : Seamlessly integrates CakePHP with ExtJS and Sencha Touch (http://banchaproject.org)
+ * Copyright 2011-2012 StudioQ OG
  *
- * Licensed under The MIT License
- * Redistributions of files must retain the above copyright notice.
- *
- * @copyright     Copyright 2011-2012 Roland Schuetz, Kung Wong, Andreas Kern, Florian Eckerstorfer
+ * @copyright     Copyright 2011-2012 StudioQ OG
  * @link          http://banchaproject.org Bancha Project
  * @since         Bancha v 0.9.0
- * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
  * @author        Florian Eckerstorfer <florian@theroadtojoy.at>
  */
 
@@ -28,7 +24,7 @@ class BanchaControllerTest extends ControllerTestCase {
 	{
 		$response = $this->testAction('/bancha-api.js');
 		$api = json_decode(substr($response, strpos($response, '=')+1));
-		$this->assertEquals('/bancha.php', $api->url);
+		$this->assertEquals('/bancha-dispatcher.php', substr($api->url,-22,22)); //strip the absolute path, otherwise it doesn't probably work in the terminal
 		$this->assertEquals('Bancha.RemoteStubs', $api->namespace);
 		$this->assertEquals('remoting', $api->type);
 		$this->assertTrue(isset($api->metadata->_UID));
@@ -44,7 +40,7 @@ class BanchaControllerTest extends ControllerTestCase {
 	{
 		$response = $this->testAction('/bancha-api/models/User.js');
 		$api = json_decode(substr($response, strpos($response, '=')+1));
-		$this->assertEquals('/bancha.php', $api->url);
+		$this->assertEquals('/bancha-dispatcher.php', substr($api->url,-22,22)); //strip the absolute path, otherwise it doesn't probably work in the terminal
 		$this->assertEquals('Bancha.RemoteStubs', $api->namespace);
 		$this->assertEquals('remoting', $api->type);
 		$this->assertTrue(isset($api->metadata->_UID));
@@ -62,7 +58,7 @@ class BanchaControllerTest extends ControllerTestCase {
 	{
 		$response = $this->testAction('/bancha-api/models/all.js');
 		$api = json_decode(substr($response, strpos($response, '=')+1));
-		$this->assertEquals('/bancha.php', $api->url);
+		$this->assertEquals('/bancha-dispatcher.php', substr($api->url,-22,22)); //strip the absolute path, otherwise it doesn't probably work in the terminal
 		$this->assertEquals('Bancha.RemoteStubs', $api->namespace);
 		$this->assertEquals('remoting', $api->type);
 
